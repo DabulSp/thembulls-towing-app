@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Wreck Chasing: South Philly - Level 5</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial,sans-serif;touch-action:none}
+  #game{position:fixed;inset:0}
+  #game canvas{display:block;width:100%;height:100%}
+  #topbar{
+    position:fixed;top:0;left:0;width:100%;z-index:10;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px;color:#fff;background:rgba(0,0,0,.76);
+    border-bottom:3px solid #f4b400;gap:10px
+  }
+  #title{color:#f4b400;font-weight:900;font-size:clamp(15px,4vw,24px);white-space:nowrap}
+  #stats{font-weight:800;font-size:14px;white-space:nowrap}
+  #mission{
+    position:fixed;top:63px;left:50%;transform:translateX(-50%);z-index:10;
+    max-width:min(92vw,620px);background:rgba(0,0,0,.76);color:#fff;
+    padding:9px 14px;border:2px solid rgba(244,180,0,.55);border-radius:12px;
+    font-size:14px;font-weight:700;text-align:center;pointer-events:none
+  }
+  #status{
+    position:fixed;left:12px;top:116px;z-index:12;
+    background:rgba(0,0,0,.68);color:#fff;padding:8px 10px;border-radius:10px;
+    font-size:12px;line-height:1.4
+  }
+  #status b{color:#f4b400}
+  #controls{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:20;
+    display:grid;grid-template-columns:repeat(3,72px);grid-template-rows:repeat(2,62px);gap:8px
+  }
+  .control{
+    border:none;border-radius:16px;background:rgba(244,180,0,.92);color:#000;
+    font-size:28px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,.55);
+    user-select:none;-webkit-user-select:none;touch-action:none
+  }
+  .control:active{transform:scale(.94);background:#fff}
+  #forward{grid-column:2}
+  #left{grid-column:1;grid-row:2}
+  #reverse{grid-column:2;grid-row:2}
+  #right{grid-column:3;grid-row:2}
+  #gameOver{
+    position:fixed;inset:0;z-index:50;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,.83)
+  }
+  #gameOverBox{
+    width:min(90%,430px);padding:28px;background:#111;color:#fff;border:4px solid #f4b400;border-radius:22px;text-align:center
+  }
+  #gameOverBox h2{margin-top:0;color:#f4b400;font-size:32px}
+  #restart{border:none;border-radius:14px;padding:14px 24px;background:#f4b400;color:#000;font-weight:900;font-size:20px;cursor:pointer}
+  #back{
+    position:fixed;bottom:10px;right:12px;z-index:25;color:#fff;text-decoration:none;background:rgba(0,0,0,.6);
+    padding:8px 10px;border-radius:8px;font-size:12px
+  }
+  #cameraBtn{
+    position:fixed;right:12px;top:116px;z-index:25;border:2px solid #f4b400;border-radius:10px;
+    padding:9px 12px;background:rgba(0,0,0,.72);color:#fff;font-weight:900;cursor:pointer
+  }
+  #flash{
+    position:fixed;inset:0;pointer-events:none;z-index:40;opacity:0;background:rgba(244,180,0,.23)
+  }
+  @media(min-width:800px){
+    #controls{grid-template-columns:repeat(3,82px)}
+    .control{height:68px}
+  }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="topbar">
+  <div id="title">WRECK CHASING: SOUTH PHILLY</div>
+  <div id="stats">🚗 <span id="score">0</span> | 💵 $<span id="cash">0</span> | ⭐ <span id="rep">0</span> | ❤️ <span id="health">100</span> | <span id="mph">0</span> MPH | ⏱ <span id="time">120</span></div>
+</div>
+
+<div id="mission">Beat the rival tow truck to the wreck. Slow down beside it to hook up.</div>
+<div id="status"><b>DISPATCH:</b> WRECK CALL<br><span id="distance">Distance: --</span><br><span id="rivalDistance">Rival: --</span></div>
+
+<div id="controls">
+  <button class="control" id="forward" data-key="ArrowUp">▲</button>
+  <button class="control" id="left" data-key="ArrowLeft">◀</button>
+  <button class="control" id="reverse" data-key="ArrowDown">▼</button>
+  <button class="control" id="right" data-key="ArrowRight">▶</button>
+</div>
+
+<div id="gameOver">
+  <div id="gameOverBox">
+    <h2>SHIFT COMPLETE!</h2>
+    <p>Vehicles delivered: <strong id="finalScore">0</strong></p>
+    <p>Cash earned: <strong>$<span id="finalCash">0</span></strong> &nbsp; Reputation: <strong><span id="finalRep">0</span></strong></p>
+    <button id="restart">PLAY AGAIN</button>
+  </div>
+</div>
+
+<div id="flash"></div>
+<button id="cameraBtn">📷 CAMERA</button>
+<a id="back" href="index.html">← Main Site</a>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js";
+
+const $ = id => document.getElementById(id);
+let audioCtx,engineOsc,engineGain;
+function startAudio(){
+  if(audioCtx)return;
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  engineOsc=audioCtx.createOscillator(); engineGain=audioCtx.createGain();
+  engineOsc.type="sawtooth"; engineGain.gain.value=.025;
+  engineOsc.connect(engineGain).connect(audioCtx.destination); engineOsc.start();
+}
+function beep(freq=500,duration=.12,volume=.08){
+  if(!audioCtx)return;
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.frequency.value=freq; g.gain.setValueAtTime(volume,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);
+  o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+duration);
+}
+addEventListener("pointerdown",startAudio,{once:true});
+addEventListener("keydown",startAudio,{once:true});
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87bde0);
+scene.fog = new THREE.Fog(0x87bde0, 95, 250);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, .1, 550);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+$("game").appendChild(renderer.domElement);
+
+const sun = new THREE.DirectionalLight(0xffffff,2.1);
+sun.position.set(55,95,35);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left = -90;
+sun.shadow.camera.right = 90;
+sun.shadow.camera.top = 90;
+sun.shadow.camera.bottom = -90;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xffffff,0x506830,1.35));
+
+const mat = color => new THREE.MeshStandardMaterial({color});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(280,280), mat(0x3c762e));
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+function addRoad(x,z,w,d){
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(w,d), mat(0x292929));
+  road.rotation.x = -Math.PI/2;
+  road.position.set(x,.025,z);
+  road.receiveShadow = true;
+  scene.add(road);
+}
+[-70,0,70].forEach(x=>addRoad(x,0,34,280));
+[-92,-31,31,92].forEach(z=>addRoad(0,z,280,30));
+
+/* South Philly street furniture */
+function addStreetlight(x,z){
+  const pole=box(x,3.8,z,.22,7.6,.22,0x202020);
+  const arm=box(x+(x<0?.65:-.65),7.35,z,1.5,.16,.16,0x202020);
+  const lamp=new THREE.PointLight(0xffd27a,1.2,22,2);
+  lamp.position.set(x+(x<0?1.3:-1.3),7.15,z);
+  scene.add(lamp);
+  const bulb=box(lamp.position.x,7.15,z,.45,.22,.55,0xffd27a,false);
+  bulb.material.emissive=new THREE.Color(0xffa928);
+}
+[-105,-62,-15,38,78,112].forEach(z=>{addStreetlight(-19,z);addStreetlight(19,z);});
+
+function box(x,y,z,w,h,d,color,cast=true){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));
+  m.position.set(x,y,z);
+  m.castShadow = cast;
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+/* sidewalks */
+[-22,22].forEach(x=>box(x,.12,0,5,.22,260,0xb9b9b9,false));
+[-62,0,62].forEach(z=>{
+  box(0,.13,z-18,260,.22,4,0xb9b9b9,false);
+  box(0,.13,z+18,260,.22,4,0xb9b9b9,false);
+});
+
+/* lane markings */
+for(let z=-122;z<126;z+=12){
+  if(Math.abs(z)<22 || Math.abs(z-62)<22 || Math.abs(z+62)<22) continue;
+  box(0,.07,z,.65,.04,6,0xf4b400,false);
+}
+[-62,0,62].forEach(rz=>{
+  for(let x=-120;x<122;x+=12){
+    if(Math.abs(x)<24) continue;
+    box(x,.07,rz,.6,.04,6,0xffffff,false).rotation.y=Math.PI/2;
+  }
+});
+
+/* city buildings */
+const buildingColors=[0x8d6654,0x75625b,0x9b7866,0x6f625b,0x9c8b7a];
+for(let z=-105;z<=105;z+=28){
+  if(Math.abs(z)<28 || Math.abs(z-62)<25 || Math.abs(z+62)<25) continue;
+  [-38,38].forEach((x,i)=>{
+    const h=12+Math.random()*18;
+    const b=box(x,h/2,z,18,h,20,buildingColors[(i+Math.floor((z+110)/28))%buildingColors.length]);
+    for(let yy=4;yy<h-2;yy+=4){
+      for(let xx=-5;xx<=5;xx+=5){
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.7),new THREE.MeshBasicMaterial({color:0x9ed8ff}));
+        win.position.set(x+xx,yy,z+(x<0?10.01:-10.01));
+        win.rotation.y = x<0 ? 0 : Math.PI;
+        scene.add(win);
+      }
+    }
+  });
+}
+
+/* brick rowhomes, stoops and parked cars */
+const brickColors=[0x7a3d2f,0x8c4f3e,0x6d4036,0x9a5943];
+[-112,-76,-48,48,76].forEach((z,row)=>{
+  [-104,-92,-80,80,92,104].forEach((x,i)=>{
+    const h=9+(i%3);
+    box(x,h/2,z,9,h,14,brickColors[(row+i)%brickColors.length]);
+    box(x,1.0,z+(z<0?7.25:-7.25),2.8,2,.4,0x241b18,false);
+    box(x,.25,z+(z<0?8.2:-8.2),4,.5,2.2,0x777777,false);
+  });
+});
+
+function makeParkedCar(x,z,color,rot=0){
+  const g=new THREE.Group();
+  const body=meshBox(2.7,.9,4.6,color); body.position.y=.85; g.add(body);
+  const roof=meshBox(2.05,.65,2.1,color); roof.position.set(0,1.55,.05); g.add(roof);
+  g.position.set(x,0,z); g.rotation.y=rot; scene.add(g);
+}
+[-108,-55,15,72].forEach((z,i)=>{
+  makeParkedCar(-13,z,[0x365f9c,0xd9d9d9,0x242424,0x7e2430][i],0);
+  makeParkedCar(13,z+13,[0x865a30,0x2c7a49,0x8b8b8b,0x394e75][i],Math.PI);
+});
+
+/* THEMBULLS yard */
+const yardZ = 102;
+const yard = new THREE.Mesh(new THREE.PlaneGeometry(30,28),mat(0x5b5b5b));
+yard.rotation.x=-Math.PI/2; yard.position.set(0,.035,yardZ); scene.add(yard);
+const garage=box(10,6,111,15,12,10,0x181818);
+const garageDoor=box(10,4.2,105.9,9,7.5,.2,0xf4b400,false);
+
+function makeSign(text){
+  const c=document.createElement("canvas"); c.width=1024; c.height=256;
+  const ctx=c.getContext("2d");
+  ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);
+  ctx.strokeStyle="#f4b400";ctx.lineWidth=18;ctx.strokeRect(8,8,c.width-16,c.height-16);
+  ctx.fillStyle="#f4b400";ctx.font="bold 88px Arial";ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.fillText(text,c.width/2,c.height/2);
+  const tex=new THREE.CanvasTexture(c);
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(15,3.75),new THREE.MeshBasicMaterial({map:tex}));
+  sign.position.set(10,9.5,105.75);
+  scene.add(sign);
+}
+makeSign("THEMBULLS TOWING");
+
+/* yard delivery pad */
+const deliveryPad = new THREE.Mesh(new THREE.RingGeometry(5.4,6.2,48),new THREE.MeshBasicMaterial({color:0xf4b400,side:THREE.DoubleSide}));
+deliveryPad.rotation.x=-Math.PI/2;
+deliveryPad.position.set(-8,.06,101);
+scene.add(deliveryPad);
+
+/* tow truck */
+const truck = new THREE.Group();
+scene.add(truck);
+
+function meshBox(w,h,d,color){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));
+  m.castShadow=true; m.receiveShadow=true; return m;
+}
+const chassis=meshBox(3.8,.7,7.5,0x111111); chassis.position.y=1; truck.add(chassis);
+const cab=meshBox(3.5,2.5,3,0xf4b400); cab.position.set(0,2,-1.8); truck.add(cab);
+const hood=meshBox(3.4,1.0,1.35,0xf4b400); hood.position.set(0,1.55,-3.55); truck.add(hood);
+const windshield=meshBox(2.75,1,.08,0x9ed8ff); windshield.position.set(0,2.35,-3.32); truck.add(windshield);
+const bed=meshBox(3.7,.35,4.8,0x555555); bed.position.set(0,1.48,2.15); truck.add(bed);
+const bedRailL=meshBox(.12,.35,4.8,0xb5b5b5); bedRailL.position.set(-1.8,1.75,2.15); truck.add(bedRailL);
+const bedRailR=bedRailL.clone(); bedRailR.position.x=1.8; truck.add(bedRailR);
+const lightBar=meshBox(2.25,.25,.4,0xffaa00); lightBar.material.emissive=new THREE.Color(0x663300); lightBar.position.set(0,3.4,-1.8); truck.add(lightBar);
+const brakeL=meshBox(.45,.35,.15,0x660000); brakeL.position.set(-1.25,1.25,3.82); truck.add(brakeL);
+const brakeR=brakeL.clone(); brakeR.position.x=1.25; truck.add(brakeR);
+
+function wheel(x,z){
+  const w=new THREE.Mesh(new THREE.CylinderGeometry(.7,.7,.55,18),mat(0x080808));
+  w.rotation.z=Math.PI/2; w.position.set(x,.75,z); w.castShadow=true; truck.add(w);
+}
+[-2,2].forEach(x=>{wheel(x,-2.2);wheel(x,2.25);});
+
+truck.position.set(0,0,88);
+let heading=Math.PI;
+truck.rotation.y=heading;
+
+/* rival tow truck */
+const rival=truck.clone(true);
+rival.traverse(part=>{
+  if(part.material){
+    part.material=part.material.clone();
+    if(part.material.color?.getHex()===0xf4b400)part.material.color.setHex(0xc92525);
+  }
+});
+rival.position.set(70,0,88);
+rival.rotation.y=Math.PI;
+scene.add(rival);
+let rivalHeading=Math.PI;
+
+/* stranded vehicle */
+const strandedCar=new THREE.Group(); scene.add(strandedCar);
+const carBody=meshBox(3.3,1.15,5,0xcc2222); carBody.position.y=1.08; strandedCar.add(carBody);
+const carRoof=meshBox(2.45,.95,2.45,0xaa1818); carRoof.position.set(0,1.95,.15); strandedCar.add(carRoof);
+function carWheel(x,z){
+  const w=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.4,16),mat(0x070707));
+  w.rotation.z=Math.PI/2; w.position.set(x,.55,z); strandedCar.add(w);
+}
+[-1.72,1.72].forEach(x=>{carWheel(x,-1.55);carWheel(x,1.55);});
+const beacon=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,5,12),new THREE.MeshBasicMaterial({color:0xff3333,transparent:true,opacity:.45}));
+beacon.position.y=4; strandedCar.add(beacon);
+
+/* traffic */
+const traffic=[];
+function makeTrafficCar(color,lane,startZ,dir){
+  const g=new THREE.Group();
+  const b=meshBox(2.7,1.05,4.3,color); b.position.y=.9; g.add(b);
+  const r=meshBox(2.1,.7,2.1,color); r.position.set(0,1.65,.1); g.add(r);
+  g.position.set(lane,0,startZ);
+  g.userData.dir=dir;
+  g.rotation.y=dir>0?0:Math.PI;
+  scene.add(g); traffic.push(g);
+}
+makeTrafficCar(0x2477cc,-8,-110,1);
+makeTrafficCar(0xffffff,8,105,-1);
+makeTrafficCar(0x333333,-8,35,1);
+makeTrafficCar(0x2c9b4b,8,-25,-1);
+
+function updateTraffic(delta){
+  traffic.forEach((c,i)=>{
+    c.position.z += c.userData.dir*(7+i*.8)*delta;
+    if(c.position.z>128)c.position.z=-128;
+    if(c.position.z<-128)c.position.z=128;
+  });
+}
+
+/* game state */
+const keys={};
+let speed=0, score=0, cash=0, rep=0, health=100, collisionCooldown=0, timeLeft=120, gameOver=false, lastTime=performance.now();
+let missionState="search"; // search, tow
+const garageTarget=new THREE.Vector3(-8,0,101);
+
+function setMission(text,stateText){
+  $("mission").textContent=text;
+  $("status").innerHTML=`<b>DISPATCH:</b> ${stateText}<br><span id="distance">Distance: --</span><br><span id="rivalDistance">Rival: --</span>`;
+}
+function flash(){
+  const f=$("flash"); f.style.transition="none"; f.style.opacity=".8";
+  requestAnimationFrame(()=>{f.style.transition="opacity .45s";f.style.opacity="0";});
+}
+function placeStrandedCar(){
+  const side=Math.random()>.5?1:-1;
+  const x=side*(8+Math.random()*7);
+  let z=-95+Math.random()*160;
+  if(z>72)z=35;
+  strandedCar.position.set(x,0,z);
+  strandedCar.rotation.y=Math.random()>.5?0:Math.PI;
+  strandedCar.visible=true;
+  missionState="search";
+  rival.position.set(side>0?-70:70,0,88);
+  rivalHeading=Math.PI;
+  rival.rotation.y=rivalHeading;
+  setMission("Beat the rival tow truck to the wreck. Slow down beside it to hook up.","WRECK CALL");
+  beep(740,.16,.06);
+}
+placeStrandedCar();
+
+addEventListener("keydown",e=>{keys[e.key]=true;if(e.key.startsWith("Arrow"))e.preventDefault();});
+addEventListener("keyup",e=>keys[e.key]=false);
+addEventListener("blur",()=>Object.keys(keys).forEach(k=>keys[k]=false));
+
+document.querySelectorAll(".control").forEach(button=>{
+  const key=button.dataset.key;
+  const press=e=>{e.preventDefault();keys[key]=true;button.setPointerCapture?.(e.pointerId);}
+  const release=e=>{e.preventDefault();keys[key]=false;}
+  button.addEventListener("pointerdown",press);
+  button.addEventListener("pointerup",release);
+  button.addEventListener("pointercancel",release);
+  button.addEventListener("lostpointercapture",release);
+});
+
+function updateTruck(delta){
+  if(gameOver)return;
+  if(keys.ArrowUp)speed+=19*delta;
+  if(keys.ArrowDown)speed-=14*delta;
+  speed*=Math.pow(keys.ArrowDown?.18:.34,delta);
+  speed=THREE.MathUtils.clamp(speed,-8,19);
+  if(Math.abs(speed)>.15){
+    const reverse=speed>=0?1:-1;
+    const turnRate=1.55*Math.min(1,Math.abs(speed)/5);
+    if(keys.ArrowLeft)heading+=turnRate*delta*reverse;
+    if(keys.ArrowRight)heading-=turnRate*delta*reverse;
+  }
+  truck.position.x+=Math.sin(heading)*speed*delta;
+  truck.position.z+=Math.cos(heading)*speed*delta;
+  truck.rotation.y=heading;
+  truck.position.x=THREE.MathUtils.clamp(truck.position.x,-122,122);
+  truck.position.z=THREE.MathUtils.clamp(truck.position.z,-122,122);
+  collisionCooldown=Math.max(0,collisionCooldown-delta);
+  $("mph").textContent=Math.round(Math.abs(speed)*2.4);
+  const braking=keys.ArrowDown&&speed>0;
+  [brakeL,brakeR].forEach(l=>{l.material.color.setHex(braking?0xff2222:0x660000);l.material.emissive=new THREE.Color(braking?0xaa0000:0x000000);});
+
+  traffic.forEach(car=>{
+    if(truck.position.distanceTo(car.position)<3.7 && collisionCooldown<=0){
+      speed*=-.25;
+      cash=Math.max(0,cash-10);
+      health=Math.max(0,health-12);
+      collisionCooldown=1;
+      $("cash").textContent=cash;
+      $("health").textContent=health;
+      flash();
+      beep(85,.22,.14);
+      if(health<=0)endGame();
+    }
+  });
+}
+
+function updateRival(delta){
+  if(gameOver || missionState!=="search")return;
+  const dx=strandedCar.position.x-rival.position.x;
+  const dz=strandedCar.position.z-rival.position.z;
+  const targetHeading=Math.atan2(dx,dz);
+  let turn=targetHeading-rivalHeading;
+  turn=Math.atan2(Math.sin(turn),Math.cos(turn));
+  rivalHeading+=THREE.MathUtils.clamp(turn,-1.25*delta,1.25*delta);
+  rival.position.x+=Math.sin(rivalHeading)*13.2*delta;
+  rival.position.z+=Math.cos(rivalHeading)*13.2*delta;
+  rival.rotation.y=rivalHeading;
+}
+
+const tmp=new THREE.Vector3();
+function updateMission(){
+  if(gameOver)return;
+
+  if(missionState==="search"){
+    tmp.copy(truck.position).sub(strandedCar.position);
+    const d=Math.hypot(tmp.x,tmp.z);
+    const dist=$("distance"); if(dist)dist.textContent=`Distance: ${Math.round(d)} m`;
+    const rivalD=rival.position.distanceTo(strandedCar.position);
+    const rivalDist=$("rivalDistance"); if(rivalDist)rivalDist.textContent=`Rival: ${Math.round(rivalD)} m`;
+    if(d<5.2 && Math.abs(speed)<4.5){
+      missionState="tow";
+      flash();
+      beep(920,.2,.09);
+      setMission("HOOKED! Tow the vehicle back to the glowing THEMBULLS yard circle.","TOWING");
+    } else if(rivalD<4.8){
+      rep=Math.max(0,rep-1);
+      $("rep").textContent=rep;
+      setMission("RIVAL GOT THERE FIRST! New wreck call incoming...","RIVAL WIN");
+      missionState="reset";
+      setTimeout(()=>{if(!gameOver)placeStrandedCar();},1100);
+    }
+  } else if(missionState==="tow"){
+    const behindX=truck.position.x-Math.sin(heading)*5.5;
+    const behindZ=truck.position.z-Math.cos(heading)*5.5;
+    strandedCar.position.x=THREE.MathUtils.lerp(strandedCar.position.x,behindX,.18);
+    strandedCar.position.z=THREE.MathUtils.lerp(strandedCar.position.z,behindZ,.18);
+    strandedCar.rotation.y=heading;
+
+    const d=truck.position.distanceTo(garageTarget);
+    const dist=$("distance"); if(dist)dist.textContent=`Yard: ${Math.round(d)} m`;
+    if(d<7.5 && Math.abs(speed)<5){
+      score++;
+      cash+=250;
+      rep+=2;
+      $("score").textContent=score;
+      $("cash").textContent=cash;
+      $("rep").textContent=rep;
+      flash();
+      beep(1180,.28,.1);
+      placeStrandedCar();
+    }
+  }
+}
+
+/* camera */
+const desiredCamera=new THREE.Vector3();
+const lookTarget=new THREE.Vector3();
+let cameraMode=0;
+$("cameraBtn").addEventListener("click",()=>{
+  cameraMode=(cameraMode+1)%3;
+  $("cameraBtn").textContent=["📷 CHASE","📷 CLOSE","📷 HOOD"][cameraMode];
+});
+addEventListener("keydown",e=>{if(e.key.toLowerCase()==="c")$("cameraBtn").click();});
+function updateCamera(){
+  const modes=[{behind:13,height:7.5,look:1.6},{behind:8,height:4.8,look:1.4},{behind:1.2,height:3.4,look:2.1}];
+  const view=modes[cameraMode];
+  desiredCamera.set(
+    truck.position.x-Math.sin(heading)*view.behind,
+    truck.position.y+view.height,
+    truck.position.z-Math.cos(heading)*view.behind
+  );
+  camera.position.lerp(desiredCamera,.09);
+  lookTarget.set(
+    truck.position.x+Math.sin(heading)*(cameraMode===2?12:0),
+    truck.position.y+view.look,
+    truck.position.z+Math.cos(heading)*(cameraMode===2?12:0)
+  );
+  camera.lookAt(lookTarget);
+}
+
+function endGame(){
+  gameOver=true; speed=0;
+  $("finalScore").textContent=score;
+  $("finalCash").textContent=cash;
+  $("finalRep").textContent=rep;
+  $("gameOver").style.display="flex";
+}
+function restartGame(){
+  score=0; cash=0; rep=0; health=100; timeLeft=120; gameOver=false; speed=0; heading=Math.PI;
+  truck.position.set(0,0,88); truck.rotation.y=heading;
+  $("score").textContent="0"; $("cash").textContent="0"; $("rep").textContent="0"; $("health").textContent="100"; $("mph").textContent="0"; $("time").textContent="120"; $("gameOver").style.display="none";
+  Object.keys(keys).forEach(k=>keys[k]=false);
+  placeStrandedCar(); lastTime=performance.now();
+}
+$("restart").addEventListener("click",restartGame);
+
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+function animate(now){
+  requestAnimationFrame(animate);
+  let delta=(now-lastTime)/1000; lastTime=now; delta=Math.min(delta,.05);
+
+  if(!gameOver){
+    timeLeft-=delta;
+    if(timeLeft<=0){timeLeft=0;endGame();}
+    $("time").textContent=Math.ceil(timeLeft);
+  }
+
+  updateTruck(delta);
+  updateTraffic(delta);
+  updateRival(delta);
+  updateMission();
+  updateCamera();
+  if(engineOsc&&engineGain){
+    engineOsc.frequency.setTargetAtTime(55+Math.abs(speed)*7,audioCtx.currentTime,.06);
+    engineGain.gain.setTargetAtTime(gameOver?0:.018+Math.abs(speed)*.0015,audioCtx.currentTime,.08);
+  }
+
+  beacon.visible=missionState==="search";
+  beacon.material.opacity=.25+(Math.sin(now*.006)+1)*.18;
+  lightBar.material.emissiveIntensity=1.2+(Math.sin(now*.012)+1)*.8;
+
+  renderer.render(scene,camera);
+}
+camera.position.set(0,8,102);
+animate(performance.now());
+</script>
+</body>
+</html>
