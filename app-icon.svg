@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#000"/>
+  <rect x="36" y="36" width="440" height="440" rx="72" fill="none" stroke="#f4b400" stroke-width="24"/>
+  <path d="M108 292h296v88H108z" fill="#f4b400"/>
+  <path d="M160 218h150l78 74H124z" fill="#f4b400"/>
+  <path d="M184 238h110l45 42H151z" fill="#111"/>
+  <circle cx="174" cy="388" r="38" fill="#222" stroke="#f4b400" stroke-width="14"/>
+  <circle cx="350" cy="388" r="38" fill="#222" stroke="#f4b400" stroke-width="14"/>
+  <text x="256" y="158" fill="#f4b400" font-family="Arial,sans-serif" font-size="76" font-weight="900" text-anchor="middle">TB</text>
+</svg>

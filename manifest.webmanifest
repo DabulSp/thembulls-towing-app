@@ -1,0 +1,19 @@
+{
+  "name": "Thembulls Towing Game",
+  "short_name": "Thembulls Towing",
+  "description": "Thembulls Towing LLC towing simulator",
+  "start_url": "./game.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#f4b400",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
