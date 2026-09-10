@@ -19,6 +19,8 @@
     .game-stats { display: flex; justify-content: space-around; margin-top: 10px; font-size: 16px; font-weight: bold; color: #f4b400; flex-wrap: wrap; gap: 5px; }
     .btn-restart { display: inline-block; margin-top: 10px; padding: 10px 20px; background: #f4b400; color: #000; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
     .btn-restart:active { background: #ffcc00; }
+    .btn-install { display: inline-block; margin: 10px 0 0 8px; padding: 10px 20px; background: #fff; color: #000; font-weight: bold; border: 2px solid #f4b400; border-radius: 4px; cursor: pointer; font-size: 16px; }
+    .btn-install:active { background: #f4b400; }
     .touch-controls { margin-top: 15px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .touch-row { display: flex; justify-content: center; gap: 12px; }
     .touch-btn { width: 65px; height: 55px; font-size: 20px; font-weight: bold; background: #f4b400; color: #000; border: none; border-radius: 8px; display: flex; align-items: center; justify-content: center; touch-action: none; }
@@ -40,6 +42,7 @@
         <span>Status: <span id="status">Tap Start to begin shift!</span></span>
       </div>
       <button class="btn-restart" onclick="resetGame()">Start / Restart Shift</button>
+      <button class="btn-install" id="installApp">Install Thembulls App</button>
       <div class="touch-controls">
         <div class="touch-row"><button class="touch-btn" id="btnUp">▲</button></div>
         <div class="touch-row">
@@ -242,6 +245,28 @@
 
     function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
     gameLoop();
+
+    let installPrompt = null;
+    const installButton = document.getElementById('installApp');
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      installPrompt = event;
+      installButton.innerText = 'Install Thembulls App';
+    });
+    installButton.addEventListener('click', async () => {
+      if (installPrompt) {
+        installPrompt.prompt();
+        const result = await installPrompt.userChoice;
+        statusEl.innerText = result.outcome === 'accepted' ? 'App installed!' : 'Install canceled.';
+        installPrompt = null;
+      } else {
+        statusEl.innerText = 'Open your browser menu and tap Add to Home screen.';
+      }
+    });
+    window.addEventListener('appinstalled', () => {
+      installButton.innerText = 'App Installed';
+      statusEl.innerText = 'Thembulls App installed!';
+    });
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
