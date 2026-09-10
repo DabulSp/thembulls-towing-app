@@ -1,5 +1,5 @@
-const CACHE = "thembulls-towing-v1";
-const FILES = ["./", "./index.html", "./game.html", "./manifest.webmanifest", "./app-icon.svg"];
+const CACHE = "thembulls-towing-v2";
+const FILES = ["./", "./index.html", "./game.html", "./manifest.webmanifest", "./app-icon.png"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
